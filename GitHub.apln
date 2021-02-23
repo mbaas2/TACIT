@@ -1,4 +1,4 @@
-:namespace GitHub
+﻿:namespace GitHub
     split←(≠⊆⊢)
     DefaultOrg←'Dyalog'
     HomeDir←'./'
@@ -95,10 +95,10 @@
       h←Params _gethc url
       z←0
       :While 0=(res←h.Run).rc
-          :If res.HttpStatus≠200
-              ('Error: HttpStatus≠0!',(⎕UCS 13),⍕{6::'' ⋄ ⍵.Data.message}res)⎕SIGNAL 11
-          :EndIf
           j←⎕JSON res.Data
+          :If res.HttpStatus≠200
+              ('Error: HttpStatus≠0!',(⎕UCS 13),⍕{6::'' ⋄ ⍵.Data.message}j)⎕SIGNAL 11
+          :EndIf
           :If j≡⍬ ⋄ →≢R←(0,⍴fields)⍴0 ⋄ :EndIf   ⍝ exit early if empty result
           :If 0=⎕NC'fields'
           :OrIf 0=≢fields

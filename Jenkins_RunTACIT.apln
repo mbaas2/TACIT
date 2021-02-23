@@ -1,0 +1,9 @@
+:namespace Jenkins_RunTACIT 
+
+∇ Run sink
+⎕←'Environment Variables:'
+⎕←⎕sh'env'
+∇
+
+
+:endnamespace
