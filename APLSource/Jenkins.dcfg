@@ -1,0 +1,13 @@
+{ "Settings": {
+  /* configure Jenkins username or API-Key here or through environment-variables.
+     (Use CISERVER-URL below as entry point for the browser to sign up and get credentials...)
+     We assume EnvVars will be set, but this serves as a reminder about values we need.
+     "JENKINS_USERNAME": "",  
+     "JENKINS_APIKEY" : "",
+     */
+     "JOBNAME" : "MB-Test1",
+     "CISERVER": "http://jenkinstest.dyalog.bramley"
+
+  }
+}
+
