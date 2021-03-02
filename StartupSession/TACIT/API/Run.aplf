@@ -1,0 +1,15 @@
+∇ R←Run arg
+ ⍝ The calling-mechanism is up to you (JR), TACIT-Manager will be launched and it will be given a pointer to a repository (well, the URL of a repo) 
+ ⍝ and a "selector" of what needs testing (commit-sha or tag or branch)  I assume these values will be passed using EnvVars - maybe TACIT_URL and one of TACIT_SHA, TACIT_TAG, TACIT_BRANCH (Will actually use a default auf BRANCH=master)
+
+url←1 ##.getArg'URL' arg
+sha←0 ##.getArg'TACIT_SHA' 
+ tag←0 ##.getArg env'TACIT_TAG' 
+  bra←0 ##.getArg env'TACIT_BRANCH' 
+
+:if 0=≢sha,tag,bra ⋄ 'Not one of the required EnvVars "TACIT_SHA", "TACIT_TAG" or "TACIT_BRANCH" was found!'⎕signal 11 ⋄ :endif
+
+⎕←'TACIT launched on repo ',url
+
+
+∇

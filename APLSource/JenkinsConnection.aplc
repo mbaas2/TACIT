@@ -1,0 +1,201 @@
+:class JenkinsConnection
+    :field private crumb←''
+    :field public CISERVER←''
+    :field public JENKINS_USER←''
+    :field public JENKINS_APIKEY←''
+    :field public JOBNAME←''
+    :field private cookie
+    :field public debug←1
+    :section Internals
+    env←{2 ⎕NQ'.' 'GetEnvironment'⍵}     ⍝ get value from environment-variable or .dcfg
+
+    :property CREDS
+        ∇ R←get
+          :Access public
+          R←JENKINS_USER,':',JENKINS_APIKEY
+        ∇
+    :endproperty
+
+    ∇ New0
+      :Implements constructor
+      :Access   public
+      CISERVER←env'CISERVER'
+      JENKINS_USER←env'JENKINS_USERNAME'
+      JENKINS_APIKEY←env'JENKINS_APIKEY'
+      Init
+    ∇
+
+    ∇ New1 ciserver
+      :Access   public
+      :Implements constructor
+      CISERVER←ciserver
+      JENKINS_USER←env'JENKINS_USERNAME'
+      JENKINS_APIKEY←env'JENKINS_APIKEY'
+      Init
+    ∇
+
+    ∇ New2(ciserver usr)
+      :Access   public
+      :Implements constructor
+      CISERVER←ciserver
+      JENKINS_USER←usr
+      JENKINS_APIKEY←env'JENKINS_APIKEY'
+      Init
+    ∇
+
+    ∇ Init
+      ⎕SE.SALT.Load'HTTPCommand -target=#'         ⍝ needs Brians updates from Feb3d, so we need to keep it in the same folder!
+      crumb←(get'/crumbIssuer/api/json').crumb
+    ∇
+
+
+    ∇ R←{opt}get url;prms
+    ⍝ opt= undefined | 1 (to return result and instance of HttpCommand that was created & execxuted)
+      :If 0=⎕NC'opt' ⋄ opt←0 ⋄ :EndIf
+      url←CISERVER,url
+      prms←⎕NS''
+      prms.u←CREDS
+      h←⎕NEW #.HttpCommand('GET'url prms)
+      ⍝ res←#.HttpCommand.Get url prms
+      res←h.Run
+      :If res.rc=0
+          :If opt=0
+              :Trap 0
+                  R←⎕JSON res.Data
+              :Else
+               ⍝ Could not JSONify res.Data!
+               ⍝ happens for example with http://jenkinstest.dyalog.bramley/job/MB-Test1/1/consoleText/api/json  (despite /api/json suffix!)
+               ⍝ no idea if I could do anything better...
+                  R←res.Data
+              :EndTrap
+     
+          :Else ⍝ opt=1
+              R←res h
+          :EndIf
+          :If 0<≢c←{2⊃(⍵⍪⊂'')[⍵[;1]⍳⊂'Set-Cookie';]}res.Headers
+              cookie←c
+          :EndIf
+      :Else
+          ⎕←'Call to "',url,'" did not end with rc=0'
+          ⎕←res,'    ⍝ res'
+          (1+⊃⎕LC)⎕STOP⊃⎕SI
+          ⎕←(1+⊃⎕LC),' ⎕STOP ',⊃⎕SI
+     
+      :EndIf
+    ∇
+
+
+    ∇ R←{data}post url_addHd;url;addHd;Headers;res;retC;h
+    ⍝ ⍺=undefined | data to post | 1 (to return the instance of HttpCommand that was generated & executed)
+      retC←0
+      :If 0=⎕NC'data' ⋄ data←'' ⋄ :EndIf
+      :If data≡1 ⋄ retC←1 ⋄ data←'' ⋄ :EndIf
+      (url addHd)←2↑(⊆url_addHd),⊂''
+      url←((1+url⍳'/')↑url),CREDS,'@',(1+url⍳'/')↓url  ⍝ use authentication with credentials in URL
+      Headers←1 2⍴'Cookie'cookie
+      Headers⍪←'Jenkins-Crumb'crumb
+      Headers⍪←'u'CREDS
+      :If 0<≢addHd ⋄ Headers⍪←addHd ⋄ :EndIf
+      h←⎕NEW #.HttpCommand('post'url data Headers)
+     
+      res←h.Run
+      :If res.rc=0
+      :AndIf res.HttpStatus∊200 201
+          R←res.(rc Data)
+          :If retC ⋄ R←res h ⋄ :EndIf
+      :Else
+          ⎕←'Call to "',url,'" did not end with rc=0 (and HttpStatus=200)'
+          ⎕←res,'    ⍝ res'
+          (1+⊃⎕LC)⎕STOP⊃⎕SI
+          ⎕←(1+⊃⎕LC),' ⎕STOP ',⊃⎕SI
+      :EndIf
+    ∇
+
+    :endsection
+
+
+    :section Public Methods
+
+
+    ∇ (rc msg)←file RunJob jobname;h;con;⎕TRAP;r;bin;url;res;sink
+      :Access public
+     
+⍝ R=rc     success or not? (0=ok, 2nd)
+⍝    msg  processing log if rc[1]=0, errMsg otherwise
+⍝ ## Create the Jenkins job
+⍝ echo "Creating Jenkins Job"
+⍝ curl -s -XPOST "${CISERVER}/createItem?name=${JOBNAME}" --data-binary @jobTemplate.xml -H "$CRUMB" -H "Content-Type:text/xml" -u $CREDS
+     
+     
+      :If 0=≢jobname ⋄ jobname←env'JOBNAME' ⋄ :EndIf
+      :If 0=≢jobname ⋄ 'No JOBNAME given!'⎕SIGNAL 11 ⋄ :EndIf
+      JOBNAME←jobname
+      bin←1⊃⎕NGET file
+      url←CISERVER,'/createItem?name=',JOBNAME
+      res←bin post(url(1 2⍴'Content-Type' 'application/xml'))
+      :If 0≠⊃res
+      :AndIf debug
+          ⎕←'Unexpected result after positing to ',url
+          res
+          ∘∘∘
+      :EndIf
+    ⍝ ## Run the jenkins job
+    ⍝ echo "Running Job"
+    ⍝ curl -s -XPOST "${CISERVER}/job/${JOBNAME}/build" -H "$CRUMB" -u $CREDS
+      :If debug ⋄ ⎕←'Running job' ⋄ :EndIf
+      (r h)←1 post CISERVER,'/job/',JOBNAME,'/build' ⍝ use authentication with credentials in URL
+     
+      :If r.rc=0
+      :AndIf r.HttpStatus∊200 201
+⍝ Jenkins takes a moment to start the job, the lastBuild will return a 404 until the FIRST job is running or has completed
+          h.URL←{((1+⍵⍳'/')↑⍵),CREDS,'@',(1+⍵⍳'/')↓⍵}CISERVER,'/job/',JOBNAME,'/lastBuild/api/json' ⍝ use authentication with credentials in URL
+          :If debug ⋄ ⎕←'Waiting for job to start' ⋄ :EndIf
+          :Repeat
+              {}⎕DL 1
+              r←h.Run
+          :Until r.rc≠404
+     
+          :If debug ⋄ ⎕←'Waiting for job to finish' ⋄ :EndIf
+          :Repeat
+              ⎕DL 1
+              r←h.Run
+          :Until r.rc=0
+          :AndIf r.HttpStatus=200
+          :AndIf (j←⎕JSON r.Data).building≡⊂'false'
+     
+        ⍝ # Show the console output
+        ⍝ curl ${CISERVER}/job/${JOBNAME}/${JID}/consoleText
+          msg←get'/job/',JOBNAME,'/',(⍕j.id),'/consoleText'
+          ⍝ h.Command←'get'
+          ⍝ con←h.Run
+     
+        ⍝ #Cleanup
+          :If debug=1 ⋄ ⎕←'Deleting job' ⋄ :EndIf
+          (rc sink)←post CISERVER,'/job/',JOBNAME,'/doDelete'
+          :If 0≠rc
+              (1+1⊃⎕LC)⎕STOP debug/1⊃⎕SI
+              ⎕←'Error deleting job'
+          :EndIf
+      :Else
+          ⎕←'Unexpected rc from "build":' ⋄ ⎕←r
+          ∘∘∘
+      :EndIf
+     
+    ∇
+    :endsection
+
+
+⍝---→ Sample ←-----------------------------------
+    :Section Sample (with the Run-function)
+    ∇ (rc log)←Run sink;file;⎕TRAP;j
+      :Access public shared
+      :If ⎕NEXISTS file←'./jobTemplate.xml'
+      :OrIf ⎕NEXISTS file←'./APLSource/jobTemplate.xml'
+          j←⎕NEW JenkinsConnection ⋄ j.Debug←1 ⋄ (rc log)←file j.RunJob'MB-Test1' 
+      :Else
+          ⎕←'Could not find jobTemplate!'
+      :EndIf
+    ∇
+    :EndSection
+
+:endclass

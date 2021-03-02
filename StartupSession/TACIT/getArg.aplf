@@ -1,0 +1,26 @@
+∇ R←req_dflt getArg(name args);t
+⍝ get value of a TACIT-Argument by first checking if args is a UCMD-commandline with the appopriate switch set
+⍝ or use an envVar (with a prefix "TACIT") if not UCMD or not set.
+⍝ Alternatively name can also be a character-vector which contains assignments of those values (no prefix, separated by "=")
+req←⊃req_dflt
+dflt←∊1↓req_dflt
+
+
+:if 0<≢R←name{2 6::'' ⋄ ⍵.Switch name}args
+⍝ nothing to do, it's in R already
+:elseif (⎕dr' ')=⎕dr args
+:andif ∨/z←(name,'=')⍷args
+R←(1+≢args)↓name  ⍝ drop name and "="
+:if '"'=⊃args
+:else 
+:endif
+:else
+'Not sure how to process ⍵ you gave me!'{w: ⍺ ⎕signal 11 ⋄ ⎕←⍺}req 
+:endif
+
+:if 0=≢R
+:if 0=≢R←2⎕nq'.' 'GetEnvironment' ('TACIT_'{~∨/⍺⍷⍥⎕c ⍵:⍺,⍵ ⋄ ⍵}name)
+R←dflt
+:endif
+:endif
+∇
