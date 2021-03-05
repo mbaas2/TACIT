@@ -1,0 +1,28 @@
+ R←req_dflt _getArg(name args);t
+⍝ get value of a TACIT-Argument by first checking if args is a UCMD-commandline with the appopriate switch set
+⍝ or use an envVar (with a prefix "TACIT") if not UCMD or not set.
+⍝ Alternatively name can also be a character-vector which contains assignments of those values (no prefix, separated by "=")
+ req←⊃req_dflt
+ dflt←∊1↓req_dflt
+
+          findLine←{⍺←(1⊃⎕rsi).⎕nr 2⊃⎕si ⋄ {(+/^\⍵=' ')↓⍵}¨l↓¨(((l←2+≢⍵)↑¨⍺)≡¨⊂'⍝',⍵,':')/⍺}
+      parser←⎕new ⎕se.Parser ('nargs=',1⊃findLine'Parse')
+      (1+1⊃⎕LC)⎕STOP 1⊃⎕SI
+
+ :If 0<≢R←name req{2 6::'' ⋄ (name req)←2↑(⊆⍺),0 ⋄ 0<≢name: ⍵.Switch name ⋄ }args
+⍝ nothing to do, it's in R already
+ :ElseIf (⎕DR' ')=⎕DR args
+ :AndIf ∨/z←(name,'=')⍷args
+     R←(1+≢args)↓name  ⍝ drop name and "="
+     :If '"'=⊃args
+     :Else
+     :EndIf
+ :Else
+     'Not sure how to process ⍵ you gave me!'{w:⍺ ⎕SIGNAL 11 ⋄ ⎕←⍺}req
+ :EndIf
+
+ :If 0=≢R
+     :If 0=≢R←2 ⎕NQ'.' 'GetEnvironment'('TACIT_'{~∨/⍺⍷⍥⎕C ⍵:⍺,⍵ ⋄ ⍵}name)
+         R←dflt
+     :EndIf
+ :EndIf

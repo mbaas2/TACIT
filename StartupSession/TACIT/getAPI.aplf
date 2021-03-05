@@ -1,9 +1,0 @@
-{res}←{larg}getAPI (fn rarg)
- ⍝ load API-Function "fn" and execute with rarg and optional larg
- ⎕←'getAPI'
- {}'API'⎕ns''
- xx←⎕se.SALT.Load ⎕←(1⊃⎕nparts 4⊃5179⌶1⊃⎕si),'/API/',fn,'.aplf -target=API'
-
- :if 0=⎕nc 'larg'⋄res←⍎'API.',fn,' rarg'
- :else ⋄res←⍎'larg API.',fn,' rarg'
- :endif

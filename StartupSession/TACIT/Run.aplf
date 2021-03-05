@@ -1,4 +1,0 @@
-{R}←{larg}Run rarg
-:if 0=⎕nc'larg'⋄ R←getAPI 'Run' rarg
-:else ⋄ R←larg getAPI 'Run' rarg
-:endif
