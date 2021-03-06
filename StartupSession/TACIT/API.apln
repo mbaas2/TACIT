@@ -3,20 +3,23 @@
 
     ∇ R←ExecuteLocalTest arg;fld;fl;loc;xin
 ⍝:: Execute local test
-⍝?: Execute local test (Syntax: ]ExecuteLocalTest [-File=]{path}\TACIT.JSON, -Local=0|1, [-ExecIn=path])
+⍝?: Execute local test (Syntax: ]ExecuteLocalTest {path}\TACIT.JSON [-Local=0|1] [-ExecIn=path]
 ⍝??: -File: mandatory, points to a TACIT.JSON-File.
 ⍝??: NB: the tests will be executed in the folder that contains -File, unless -ExecIn points to an existing, empty folder)
-⍝Parse: 1L -File= -Local=01 -ExecIn=
-(⎕lc[1]+1)⎕stop 1⊃⎕si
+⍝Parse: 1L -file= -local=0 1 -execin=
+      arg←##._Parse arg  ⍝ ensure its a parsed arg...
       nl←⎕UCS 13
-      fld←1⊃⎕NPARTS fl←∊1 ⎕NPARTS 1 _getArg''arg  ⍝ fld=folder, fl=path to a TACIT.json
-      loc←0 _getArg'Local'
-      xin←0(1⊃⎕NPARTS fl)_getArg'ExecIn'
+      fld←1⊃⎕NPARTS fl←∊1 ⎕NPARTS (1 '' ##._getArg 1 arg)  ⍝ fld=folder, fl=path to a TACIT.json
+      loc←0 0 ##._getArg'local'arg
+      xin←0(1⊃⎕NPARTS fl)##._getArg'execin'arg
      
-⎕←'fld=',fld
-⎕←'loc=',loc
-⎕←'xin=',xin
-     ∘∘∘
+      ⎕←'fld=',fld
+      ⎕←'fl=',fl
+      ⎕←'loc=',loc
+      ⎕←'xin=',xin
+      R←''
+      →0
+      ∘∘∘
       'TACIT.JSON not found'⎕SIGNAL((~⎕NEXISTS fl)∨'tacit.json'≢⎕C∊1↓⎕NPARTS fl)/700
       :Trap 0
           specs←⎕JSON 1⊃⎕NGET fl

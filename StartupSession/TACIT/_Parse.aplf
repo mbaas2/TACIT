@@ -1,0 +1,7 @@
+args←_Parse args
+:If (⎕DR' ')=⎕DR args
+     findLine←{⍺←(2⊃⎕RSI).⎕NR 3⊃⎕SI ⋄ {(+/∧\⍵=' ')↓⍵}¨l↓¨(((l←2+≢⍵)↑¨⍺)≡¨⊂'⍝',⍵,':')/⍺}
+     split1←{i←⍵⍳⍺ ⋄ (⍵[⍳i-1])(i↓⍵)}
+     parser←⎕NEW ⎕SE.Parser('' 'nargs=',¨⌽' 'split1 1⊃findLine'Parse')
+     args←parser.Parse args
+ :EndIf
