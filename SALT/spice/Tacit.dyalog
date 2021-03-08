@@ -69,7 +69,7 @@
               hd←(⊂hd),⊂':if 2=⎕nc''larg''⋄',(r/'R←'),'larg _getAPI ''',fn,''' rarg'
               hd,←⊂':else⋄',(r/'R←'),'_getAPI ''',fn,''' rarg'
               hd,←⊂':endif'
-              {⎕←'Fixed ',⍵}⎕SE.TACIT.⎕FX hd
+              {}⎕SE.TACIT.⎕FX hd
           :EndFor
           ⎕SE.TACIT.UCMD._List←(¯1↓⎕SE.TACIT.UCMD._List),']'
       :EndIf
