@@ -46,7 +46,7 @@
               j,←'"Name":',quote fn
               j,←',"Desc":',quote∊nr findLine':'
               j,←',"Parse":',quote∊nr findLine'Parse'
-              j,←',"Group":',quote'TACIT'
+              j,←',"Group":"TACIT"'
               j,←'}'
               ⎕SE.TACIT.UCMD._List,←j,','
               maxH←⌈/0,∊('⍝(\?*):'⎕S{¯1↑⍵.Lengths})nr

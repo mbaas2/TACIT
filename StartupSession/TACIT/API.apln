@@ -1,41 +1,46 @@
 :namespace API
+    nl←⎕UCS 13
 
+    Timout←180 ⍝ seconds before we consider a job to have timedout
 
-    ∇ R←ExecuteLocalTest arg;fld;fl;loc;xin
+    ∇ {R}←ExecuteLocalTest arg;fld;fl;loc;xin
 ⍝:: Execute local test
 ⍝?: Execute local test (Syntax: ]ExecuteLocalTest {path}\TACIT.JSON  [-ExecIn=path]
 ⍝??: Argument: mandatory, points to a TACIT.JSON-File.
 ⍝??: NB: the tests will be executed in the folder that contains file given in argument, unless -ExecIn points to an existing, empty folder)
 ⍝Parse: 1L -execin=
+⍝R: (rc Log)  rc=0: success, anything else means failure. for error-codes see TACIT-API.docx
+     
       arg←##._Parse arg  ⍝ ensure its a parsed arg...
-      nl←⎕UCS 13
       fl←∊1 ⎕NPARTS(1 ''##._getArg 1 arg)  ⍝ fld=folder, fl=path to a TACIT.json
       ('File or directory "',fl,'" not found')⎕SIGNAL(~⎕NEXISTS fl)/700
       fl,←(1=∊1 ⎕NINFO fl)/('\/'∊⍨⊢/fl)↓'/TACIT.JSON'  ⍝ we also accept folders as arg and append the filespec automatically (since we're expecting one specific file anyway)
       fld←1⊃⎕NPARTS fl
       xin←0(1⊃⎕NPARTS fl)##._getArg'execin'arg
      
-      ⎕←'fld=',fld
-      ⎕←'fl=',fl
-      ⎕←'xin=',xin
       R←''
      
       (⎕LC[1]+1)⎕STOP 1⊃⎕SI
-      'TACIT.JSON not found'⎕SIGNAL((~⎕NEXISTS fl)∨'tacit.json'≢10↑⎕C∊1↓⎕NPARTS fl)/700
-      :Trap 0
-          specs←⎕JSON 1⊃⎕NGET fl
-      :Else
-          ('Error reading TACIT.JSON: ',nl,⎕JSON ⎕DMX)⎕SIGNAL 701
-      :EndTrap
+      :If (~⎕NEXISTS fl)∨'tacit.json'≢10↑⎕C∊1↓⎕NPARTS fl ⋄ →0⊣R←700 'TACIT.JSON not found' ⋄ :EndIf
+      specs←GetTestSpecs fl
       :If xin≢fld
-          'ExecIn is not an existing folder'⎕SIGNAL(~⎕NEXISTS xin)/702
-          'ExecIn is not an empty folder'⎕SIGNAL(0<⊃0(⎕NINFO⍠('Recurse' 1)('Wildcard' 1))xin,'/*')/702
-          (⎕LC[1]+1)⎕STOP 1⊃⎕SI
-     
-          'Problem copying files into execin-folder'⎕signal (0≠xin CopyFolder fld)/703
+          :If ~⎕NEXISTS xin ⋄ →R⊣702 'ExecIn is not an existing folder' ⋄ :EndIf
+          :If 0<⊃0(⎕NINFO⍠('Recurse' 1)('Wildcard' 1))xin,'/*' ⋄ →0⊣R←702 'ExecIn is not an empty folder' ⋄ :EndIf
+          :If 0≠xin CopyFolder fld ⋄ →0⊣R←703 'Problem copying files into execin-folder' ⋄ :EndIf
      
       :EndIf
      
+      ⍝llist←0(⎕NINFO⍠('Recurse' 1)('Wildcard' 1))xin,'*'   ⍝ remember files we had before tests were executed...
+      :For step :In 'Setup' 'Test' 'Teardown'
+          :Select rc←step RunJob fl←specs⍎Setup
+          :Case 0,(((⊂step)∊'Setup' 'Teardown')/4),(((⊂step)∊'Test' 'Teardown')/1)
+          :Case 1 ⋄ R←rc(step,' failed (left behind a file TACIT.',(⎕ step),'.err)') ⋄ →0
+          :Case 2 ⋄ R←rc(step,' did not end properly (Timeout Error)') ⋄ →0
+          :Case 3 ⋄ R←rc'No statusfile (TACIT.',(⎕ step),'.[ok|err]) found after ',(⎕C step),' ended' ⋄ →0
+          :Case 4 ⋄ R←rc'Invalid or non-existent file ',fl ⋄ →0
+          :EndSelect
+      :EndFor
+      ⍝ list2←0(⎕NINFO⍠('Recurse' 1)('Wildcard' 1))xin,'*'   ⍝ remember files we had before tests were executed...
      
      
      
@@ -57,38 +62,94 @@
       :If 0=≢sha,tag,bra ⋄ 'Not one of the required EnvVars "TACIT_SHA", "TACIT_TAG" or "TACIT_BRANCH" was found!'⎕SIGNAL 11 ⋄ :EndIf
      
       ⎕←'TACIT launched on repo ',url
-     
-     
     ∇
 
 
 
-:section tools
-∇ R←to CopyFolder from
-R←0
-from←∊1⎕nparts from ⍝ normalize it
-hf←⍬
-  :for (n t h) :in ↓[1]↑0 1 6(⎕NINFO⍠('Wildcard' 1)('Recurse' 1))(from,'/*')
-  hf,←(h^t=1)/n ⍝ collect name of hidden directories
-  :if h=1⋄:continue⋄:endif
-              :if 0<≢hf ⋄:andif 1∊hf{⍺≡(≢⍺)↑⍵}¨⊂n ⋄→0⋄:endif ⍝ file from a hidden folder
-  :if 1=t  ⍝ directory
-  :if from ≡(≢from)↑n
-    3⎕mkdir n 
-  :else 
-    ⎕←'Paranoia justified!'
-    ∘∘∘
-  :endif
- :if 1≠ (to,(≢from)↓nl)⎕ncopy n
- :endif
-:endif 
-       'n=',n,', t=',t,', h=',h
-       :endfor
+    :section tools
+    ∇ R←name RunJob load;cpu;dws;cmd;ext;proc
+⍝ returncode: 0=ok
+⍝             1=ended with error
+⍝             2=aborted because of Timeout
+⍝             3=no status file found
+⍝             4=invalid or non-existent file
+      →(0=≢load)/R←0
+      :If ~⎕NEXISTS load ⋄ →0⊣R←4 ⋄ :EndIf
+      StatusFiles←('TACIT.',⎕C name),¨'.err' '.ok'
+      :If 0=⎕NC'APLProcess' ⋄ ⎕SE.SALT.Load'APLProcess' ⋄ :EndIf
+      cpu←⎕AI[3]
+      dws←cmd←''  ⍝ Arguments for constructor of APLProcess
+      :Select ext←⎕C 3⊃⎕NPARTS load
+      :CaseList '.aplf' '.aplc' '.apln' ⋄ cmd←'load=',name
+      :Case '.dws' ⋄ dws←load
+      :Case '.dyalog' ⋄ cmd←'lx="⎕SE.UCMD''xx←Load ./',load,''' ⋄ ⍎xx"'
+      :Case '.dyalogtest' ⋄ cmd←'lx="⎕SE.UCMD''DTest -suite=',load,' -off'' ⋄ ⍎xx"'
+      :Else ⋄ →0⊣R←4
+      :EndSelect
+     
+      proc←⎕NEW APLProcess(dws cmd)
+      :Repeat
+          ⎕DL 1  ⍝ delay one second...
+      :Until ~proc.IsRunning
+      :OrIf ⎕AI[3]<proc+Timeout
+      :If proc.IsRunning   ⍝ TIMEOUT
+          R←2 ⋄ {}proc.Kill
+      :EndIf
+      :If ext≡'.dyalogtest'
+         ⍝ how to determine success or failure? (On Windows we could use prod.GetExitCode, but that won't be good enough for TACIT)
+          :If ⎕NEXISTS log←'./',(2⊃⎕NPARTS load),'.log' ⋄ StatusFiles[1]⎕NPUT'' ⋄ R←1
+          :Else ⋄ StatusFiles[2]⎕NPUT'' ⋄ R←0
+          :EndIf
+          →0
+      :EndIf
+      :If ⎕NEXISTS 2⊃StatusFiles ⋄ →R←0 ⋄ :EndIf
+      :If ⎕NEXISTS 1⊃StatusFiles ⋄ →R←1 ⋄ :EndIf
+      R←3
+     
+    ∇
 
+    ∇ (rc specs)←GetTestSpecs fl
+      :If ~(⎕C 3⊃⎕NPARTS specs.Setup)∊'.dyalog' '.aplf' '.apln' '.aplc' ⋄ rc←704 ⋄ specs←'Setup-File "',specs.Setup,'" not an accepted filetype' ⋄ →0 ⋄ :EndIf
+      :Trap 0
+          specs←⎕JSON 1⊃⎕NGET fl
+          :If 0=specs.⎕NC'Setup' ⋄ specs.Setup←'' ⋄ :EndIf
+      :Else
+          rc←701 ⋄ specs←'Error reading "',fl,'":',nl,⎕JSON ⎕DMX
+      :EndTrap
+    ∇
 
-∇
+    ∇ R←to CopyFolder from;hf;n;t;h
+    ⍝ can't use ⎕NCOPY because that would also copy hidden files/directories - which would really hurt in the case of ".git"
+    ⍝ R is returncode. Values: 0=ok
+    ⍝                          1=problems copying file
+    ⍝                          2=problems creating a folder
+      R←0
+      from←∊1 ⎕NPARTS from ⍝ normalize it
+      hf←⍬
+      :For (n t h) :In ↓[1]↑0 1 6(⎕NINFO⍠('Wildcard' 1)('Recurse' 1))(from,'/*')
+          hf,←(h∧t=1)/n ⍝ collect name of hidden directories
+          :If h=1 ⋄ :Continue ⋄ :EndIf
+          :If 0<≢hf ⋄ :AndIf 1∊hf{⍺≡(≢⍺)↑⍵}¨⊂n ⋄ →0 ⋄ :EndIf ⍝ file from a hidden folder
+          :If 1=t  ⍝ directory
+              :If from≡(≢from)↑n
+                  :Trap 0
+                      3 ⎕MKDIR to,(≢from)↓n ⋄ :Continue
+                  :Else
+                      →0⊣R←2
+                  :EndTrap
+              :Else
+                  ⎕←'Paranoia justified!'
+                  ∘∘∘
+              :EndIf
+          :EndIf
+          :If 1≠(to,(≢from)↓n)⎕NCOPY n
+              →0⊣R←1
+          :EndIf
+      :EndFor
+     
+    ∇
 
-:endsection
+    :endsection
 
 
 
