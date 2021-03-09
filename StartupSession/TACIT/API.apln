@@ -68,12 +68,21 @@
 R←0
 from←∊1⎕nparts from ⍝ normalize it
 hf←⍬
-  :for (n t h) :in 10↑↓[1]↑0 1 6(⎕NINFO⍠('Wildcard' 1)('Recurse' 1))(from,'/*')
+  :for (n t h) :in ↓[1]↑0 1 6(⎕NINFO⍠('Wildcard' 1)('Recurse' 1))(from,'/*')
   hf,←(h^t=1)/n ⍝ collect name of hidden directories
-  :if (1=t)^~h   ⍝ directory
-  ∘∘∘
-  :andif 
-       'p=',p,', s=',s,', h=',h
+  :if h=1⋄:continue⋄:endif
+              :if 0<≢hf ⋄:andif 1∊hf{⍺≡(≢⍺)↑⍵}¨⊂n ⋄→0⋄:endif ⍝ file from a hidden folder
+  :if 1=t  ⍝ directory
+  :if from ≡(≢from)↑n
+    3⎕mkdir n 
+  :else 
+    ⎕←'Paranoia justified!'
+    ∘∘∘
+  :endif
+ :if 1≠ (to,(≢from)↓nl)⎕ncopy n
+ :endif
+:endif 
+       'n=',n,', t=',t,', h=',h
        :endfor
 
 
