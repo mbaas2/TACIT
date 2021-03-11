@@ -1,120 +1,172 @@
 :namespace API
     nl←⎕UCS 13
 
-    Timout←180 ⍝ seconds before we consider a job to have timedout
+    Timeout←180 ⍝ seconds before we consider a job to have timedout
 
-    ∇ {R}←ExecuteLocalTest arg;fld;fl;loc;xin
-⍝:: Execute local test
-⍝?: Execute local test (Syntax: ]ExecuteLocalTest {path}\TACIT.JSON  [-ExecIn=path]
+    ∇ {(res Log)}←ExecuteLocalTest arg;fld;fl;loc;xin;hasCfg;rc;specs;R;step;specsObj;lg
+⍝:: Execute local tests
+⍝?: Execute local tests (Syntax: ]ExecuteLocalTest {path}\TACIT.JSON  [-ExecIn=path]
 ⍝??: Argument: mandatory, points to a TACIT.JSON-File.
-⍝??: NB: the tests will be executed in the folder that contains file given in argument, unless -ExecIn points to an existing, empty folder)
+⍝??: NB: the tests will be executed in the folder that contains file given in argument, unless -execin points to an existing, empty folder)
 ⍝Parse: 1L -execin=
-⍝R: (rc Log)  rc=0: success, anything else means failure. for error-codes see TACIT-API.docx
-     
+⍝R: (rc Log)  rc=0: success, anything else means failure. For error-codes see TACIT-API.docx
+      res←0 ⋄ Log←''
       arg←##._Parse arg  ⍝ ensure its a parsed arg...
       fl←∊1 ⎕NPARTS(1 ''##._getArg 1 arg)  ⍝ fld=folder, fl=path to a TACIT.json
       ('File or directory "',fl,'" not found')⎕SIGNAL(~⎕NEXISTS fl)/700
       fl,←(1=∊1 ⎕NINFO fl)/('\/'∊⍨⊢/fl)↓'/TACIT.JSON'  ⍝ we also accept folders as arg and append the filespec automatically (since we're expecting one specific file anyway)
       fld←1⊃⎕NPARTS fl
-      xin←0(1⊃⎕NPARTS fl)##._getArg'execin'arg
+      xin←0(1⊃⎕NPARTS fl)##._getArg'EXECIN'arg
+      hasCfg←0 ⍝ did we create a TACIT.dcfg for this test? (to pass EnvVars)
      
-      R←''
-     
-      (⎕LC[1]+1)⎕STOP 1⊃⎕SI
-      :If (~⎕NEXISTS fl)∨'tacit.json'≢10↑⎕C∊1↓⎕NPARTS fl ⋄ →0⊣R←700 'TACIT.JSON not found' ⋄ :EndIf
-      specs←GetTestSpecs fl
+⍝      (⎕LC[1]+1)⎕STOP 1⊃⎕SI
+      :If (~⎕NEXISTS fl)∨'tacit.json'≢10↑⎕C∊1↓⎕NPARTS fl ⋄ →0⊣(res Log)←700 'TACIT.JSON[5] not found' ⋄ :EndIf
+      (rc specsObj lg)←GetTestSpecs fl
+      :If rc≠0 ⋄ →0⊣(res Log)←701('Error processing specs in "',fl,'": ',⍕lg) ⋄ :EndIf
+      xin←∊1 ⎕NPARTS xin
+      xin,←('/'≠⊢/xin)/'/'
       :If xin≢fld
-          :If ~⎕NEXISTS xin ⋄ →R⊣702 'ExecIn is not an existing folder' ⋄ :EndIf
-          :If 0<⊃0(⎕NINFO⍠('Recurse' 1)('Wildcard' 1))xin,'/*' ⋄ →0⊣R←702 'ExecIn is not an empty folder' ⋄ :EndIf
-          :If 0≠xin CopyFolder fld ⋄ →0⊣R←703 'Problem copying files into execin-folder' ⋄ :EndIf
-     
+          :If ~⎕NEXISTS xin ⋄ →0⊣(res Log)←702 'ExecIn is not an existing folder' ⋄ :EndIf
+          :If 0<≢⊃0(⎕NINFO⍠('Recurse' 1)('Wildcard' 1))xin,'*' ⋄ →0⊣(res Log)←702 'ExecIn is not an empty folder' ⋄ :EndIf
+          :If 0≠xin CopyFolder fld ⋄ →0⊣(res Log)←703 'Problem copying files into execin-folder' ⋄ :EndIf
       :EndIf
+⍝TODO:: test if this apl qualifies...
      
-      ⍝llist←0(⎕NINFO⍠('Recurse' 1)('Wildcard' 1))xin,'*'   ⍝ remember files we had before tests were executed...
-      :For step :In 'Setup' 'Test' 'Teardown'
-          :Select rc←step RunJob fl←specs⍎Setup
-          :Case 0,(((⊂step)∊'Setup' 'Teardown')/4),(((⊂step)∊'Test' 'Teardown')/1)
-          :Case 1 ⋄ R←rc(step,' failed (left behind a file TACIT.',(⎕ step),'.err)') ⋄ →0
-          :Case 2 ⋄ R←rc(step,' did not end properly (Timeout Error)') ⋄ →0
-          :Case 3 ⋄ R←rc'No statusfile (TACIT.',(⎕ step),'.[ok|err]) found after ',(⎕C step),' ended' ⋄ →0
-          :Case 4 ⋄ R←rc'Invalid or non-existent file ',fl ⋄ →0
-          :EndSelect
+      cnt←0
+      list←⊃0(⎕NINFO⍠('Recurse' 1)('Wildcard' 1))xin,'*'   ⍝ remember files we had before tests were executed...
+      :For specs :In specsObj
+          :If hasCfg←9=specs.⎕NC'EnvVars'
+              'dcfg'⎕NS''
+              dcfg.Settings←specs.EnvVars
+              (⊂⎕JSON dcfg)⎕NPUT(xin,'TACIT.dcfg')1
+          :EndIf
+     
+          R←0 ''
+          :For step :In 'Setup' 'Test' 'Teardown'
+              :Select ⊃(rc log)←step RunJob(fl←specs⍎step)(hasCfg/xin,'TACIT.dcfg')(specs)
+              :Case 0,(((⊂step)∊'Setup' 'Teardown')/4),(((⊂step)∊'Test' 'Teardown')/1) ⍝ we do nothing here, but may need to catch these cases...(and continue to the next step)
+              :Case 1 ⋄ R←rc(step,' failed: log=',log) ⋄ :Leave
+              :Case 2 ⋄ R←rc(step,' did not end properly (Timeout Error)') ⋄ :Leave
+              :Case 3 ⋄ R←rc'No statusfile (TACIT.',(⎕ step),'.[ok|err]) found after ',(⎕C step),' ended' ⋄ :Leave
+              :Case 4 ⋄ R←rc'Invalid or non-existent file "',fl,'" for step "',step,'"' ⋄ :Leave
+              :EndSelect
+          :EndFor
+          res←~(~res)∧rc=0
+          Log,←⊂((R[1]≠0)/'*** '),'Status of test ',({(⎕DR' ')=⎕DR ⍵:'"',⍵,'"' ⋄ ⍕⍵}specs.id),':'
+          Log,←⊂'Ended with returncode=',(⍕rc),((rc≠0)∧0<≢log)/' and message "',log,'"'
+     
+          :If hasCfg ⋄ ⎕NDELETE xin,'TACIT.dcfg' ⋄ :EndIf  ⍝ remove dcfg if we created it...
       :EndFor
-      ⍝ list2←0(⎕NINFO⍠('Recurse' 1)('Wildcard' 1))xin,'*'   ⍝ remember files we had before tests were executed...
-     
-     
-     
-     
-    ∇
-
-
-
-    ∇ R←Run arg
-⍝:: this function may die or possibly have its name changed!
- ⍝ The calling-mechanism is up to you (JR), TACIT-Manager will be launched and it will be given a pointer to a repository (well, the URL of a repo)
- ⍝ and a "selector" of what needs testing (commit-sha or tag or branch)  I assume these values will be passed using EnvVars - maybe TACIT_URL and one of TACIT_SHA, TACIT_TAG, TACIT_BRANCH (Will actually use a default auf BRANCH=master)
-     
-      url←1 ##._getArg'URL'arg
-      sha←0 ##._getArg'TACIT_SHA'
-      tag←0 ##._getArg env'TACIT_TAG'
-      bra←0 ##._getArg env'TACIT_BRANCH'
-     
-      :If 0=≢sha,tag,bra ⋄ 'Not one of the required EnvVars "TACIT_SHA", "TACIT_TAG" or "TACIT_BRANCH" was found!'⎕SIGNAL 11 ⋄ :EndIf
-     
-      ⎕←'TACIT launched on repo ',url
+      list2←⊃0(⎕NINFO⍠('Recurse' 1)('Wildcard' 1))xin,'*'   ⍝ remember files we had before tests were executed...
+⍝ is this relevant at all???
+      :If ∨/~list2∊list
+          ⎕←'=== New files:'
+          ⎕←↑(~list2∊list)/list2
+      :EndIf
+      :If ∨/~list∊list2
+          ⎕←'==== Deleted files:'
+          ⎕←↑(~list∊list2)/list
+      :EndIf
     ∇
 
 
 
     :section tools
-    ∇ R←name RunJob load;cpu;dws;cmd;ext;proc
+    ∇ (R log)←step RunJob file_cfg_specs;cpu;dws;cmd;ext;proc;StatusFiles;ai3;log;specs;cfg;file;isDTest;Fullname;t;TestLog
 ⍝ returncode: 0=ok
-⍝             1=ended with error
+⍝             1=test failed
 ⍝             2=aborted because of Timeout
 ⍝             3=no status file found
 ⍝             4=invalid or non-existent file
-      →(0=≢load)/R←0
-      :If ~⎕NEXISTS load ⋄ →0⊣R←4 ⋄ :EndIf
-      StatusFiles←('TACIT.',⎕C name),¨'.err' '.ok'
+      log←''
+      →(0=≢file_cfg_specs)/R←0
+      (file cfg specs)←3↑⊆file_cfg_specs
+      →(0=≢file)/R←0
+      isDTest←0   ⍝ do we have a ]DTest-Call?
+     
+      :If ~⎕NEXISTS xin,file ⋄ →0⊣R←4 ⋄ :EndIf
+      ⍝ ensure we have a .dcfg
+      :If 0<≢cfg
+          :If ~⎕NEXISTS cfg ⋄ →0⊣R←4 ⋄ :EndIf
+          cfg←∊1 ⎕NPARTS cfg
+      :Else
+          cfg←xin,'cfg_',step,'.dcfg'
+          '{Settings:{}}'⎕NPUT cfg 1
+      :EndIf
+     
+      ⍝...and explicitely set a log_file for each step (to be stored in execIn-folder):
+      t←(⎕JSON⍠'Dialect' 'JSON5')1⊃⎕NGET cfg
+      t.Settings.log_file←log_file←xin,'log_',step,'.dlf'
+      (⊂⎕JSON t)⎕NPUT cfg 1
+     
+    ⍝ step of Statusfiles to indicate failure [1] or success[2]
+      StatusFiles←(⊂xin,'TACIT.',⎕C step),¨'.err' '.ok'
+      1 ⎕NDELETE¨StatusFiles  ⍝ make sure there are no old statusfiles around...
+     
       :If 0=⎕NC'APLProcess' ⋄ ⎕SE.SALT.Load'APLProcess' ⋄ :EndIf
       cpu←⎕AI[3]
       dws←cmd←''  ⍝ Arguments for constructor of APLProcess
-      :Select ext←⎕C 3⊃⎕NPARTS load
-      :CaseList '.aplf' '.aplc' '.apln' ⋄ cmd←'load=',name
-      :Case '.dws' ⋄ dws←load
-      :Case '.dyalog' ⋄ cmd←'lx="⎕SE.UCMD''xx←Load ./',load,''' ⋄ ⍎xx"'
-      :Case '.dyalogtest' ⋄ cmd←'lx="⎕SE.UCMD''DTest -suite=',load,' -off'' ⋄ ⍎xx"'
-      :Else ⋄ →0⊣R←4
+      Fullname←∊1 ⎕NPARTS xin,file
+      :Select ext←⎕C 3⊃⎕NPARTS file
+      :CaseList '.aplf' '.aplc' '.apln' ⋄ cmd←'file=',Fullname
+      :Case '.dws' ⋄ dws←Fullname
+      :Case '.dyalog' ⋄ cmd←'lx="⎕SE.UCMD''xx←Load ./',Fullname,''' ⋄ ⍎{9≠⎕nc ⍵: ⍵ ⋄ ⍵,'.Run ⍬'}'xx'"'
+      :CaseList '' '.dyalogtest'
+          →(step≢'Test')/0⊣R←4('.dyalogtest or folder-argument only valid for "Test", not "',step,'"')
+          :If ext≡'' ⋄ :AndIf 1≠1 ⎕NINFO Fullname ⋄ →0⊣R←4 ⋄ :EndIf
+          TestLog←xin,'TACIT_',(2⊃⎕NPARTS(-(ext≡''))↓Fullname),'.log'
+          ⍝cmd←'lx="⎕SE.UCMD''output.Find on -includequadoutput'' ⋄ ⎕SE.UCMD''DTest ',Fullname,' -off -testlog=',TestLog,' ',(specs{6::'' ⋄ ⍺⍎⍵}'DTestArgs'),'''"'
+          cmd←'lx="⎕SE.UCMD''DTest ',Fullname,' -off -testlog=',TestLog,' ',(specs{6::'' ⋄ ⍺⍎⍵}'DTestArgs'),'''"'
+          isDTest←1
+      :Else ⋄
+          →0⊣R←4('Did not recognize type of file "',file,'"')
       :EndSelect
+      cmd,←(0<≢cfg)/' UserConfigFile=',cfg
      
-      proc←⎕NEW APLProcess(dws cmd)
+      proc←⎕NEW APLProcess(dws cmd 0 '' ''xin)
+      ai3←⎕AI[3]
       :Repeat
           ⎕DL 1  ⍝ delay one second...
-      :Until ~proc.IsRunning
-      :OrIf ⎕AI[3]<proc+Timeout
-      :If proc.IsRunning   ⍝ TIMEOUT
-          R←2 ⋄ {}proc.Kill
+      :Until proc.HasExited
+      :OrIf ⎕AI[3]<ai3+specs.Timeout
+      :If ~proc.HasExited   ⍝ TIMEOUT
+          {}proc.Kill ⋄ →0⊣R←2
       :EndIf
-      :If ext≡'.dyalogtest'
-         ⍝ how to determine success or failure? (On Windows we could use prod.GetExitCode, but that won't be good enough for TACIT)
-          :If ⎕NEXISTS log←'./',(2⊃⎕NPARTS load),'.log' ⋄ StatusFiles[1]⎕NPUT'' ⋄ R←1
-          :Else ⋄ StatusFiles[2]⎕NPUT'' ⋄ R←0
+      :If isDTest
+         ⍝ how to determine success or failure? (On Windows we could use prod.GetExitCode, but that won't be general enough for TACIT)
+          :If ⎕NEXISTS TestLog ⋄ ''⎕NPUT 1⊃StatusFiles ⋄ log←']DTest created a logfile ("',TestLog,'") indicating failed tests. Details in that file' ⋄ R←1  ⍝ logfile was created → tests failed!
+          :Else ⋄ (⊂'')⎕NPUT 2⊃StatusFiles ⋄ R←0               ⍝ absence of log indicates success
           :EndIf
           →0
       :EndIf
       :If ⎕NEXISTS 2⊃StatusFiles ⋄ →R←0 ⋄ :EndIf
-      :If ⎕NEXISTS 1⊃StatusFiles ⋄ →R←1 ⋄ :EndIf
+      :If ⎕NEXISTS 1⊃StatusFiles ⋄ log←'Test created logfile "',(1⊃StatusFiles),'" to indicate failed tests. More info might be found in the APL Session-log "',log_file,'"' ⋄ →0⊣R←1 ⋄ :EndIf
       R←3
      
     ∇
 
-    ∇ (rc specs)←GetTestSpecs fl
-      :If ~(⎕C 3⊃⎕NPARTS specs.Setup)∊'.dyalog' '.aplf' '.apln' '.aplc' ⋄ rc←704 ⋄ specs←'Setup-File "',specs.Setup,'" not an accepted filetype' ⋄ →0 ⋄ :EndIf
-      :Trap 0
-          specs←⎕JSON 1⊃⎕NGET fl
-          :If 0=specs.⎕NC'Setup' ⋄ specs.Setup←'' ⋄ :EndIf
+    ∇ (rc rspec log)←GetTestSpecs fl
+      :Trap rc←0
+          log←''
+          cnt←0
+          rspec←⍬
+          specs←(⎕JSON⍠'Dialect' 'JSON5')1⊃⎕NGET fl
+     
+          ⍝ and make sure we have something in Test (will be validated later)
+          :For spec :In specs
+            ⍝ set defaults for optional entries Setip/Teardown
+              spec←(⊂'Setup'){0=⍵.⎕NC ⍺:⍵⊣⍵⍎⍺,'←''''' ⋄ ⍵}¨spec
+              spec←(⊂'Teardown'){0=⍵.⎕NC ⍺:⍵⊣⍵⍎⍺,'←''''' ⋄ ⍵}¨spec
+              spec.Timeout←specs{6::⍵ ⋄ ⍺.Timeout}Timeout
+     
+              cnt+←1
+              spec.id←spec{6::⍵ ⋄ ⍺⍎'id'}cnt
+              :If 0=spec.⎕NC'Test' ⋄ rc←0 ⋄ log,←'Found no entry for "Test" in settings ',{(⎕DR' ')=⎕DR ⍵:'"',⍵,'"' ⋄ ⍵}spec.id ⋄ :EndIf
+              rspec,←spec
+          :EndFor
+          :If rspec≡⍬ ⋄ rc←705 ⋄ specs←log ⋄ →0 ⋄ :EndIf
       :Else
-          rc←701 ⋄ specs←'Error reading "',fl,'":',nl,⎕JSON ⎕DMX
+          rc←701 ⋄ log←'Error reading "',fl,'":',nl,⎕JSON ⎕DMX
       :EndTrap
     ∇
 
@@ -126,10 +178,10 @@
       R←0
       from←∊1 ⎕NPARTS from ⍝ normalize it
       hf←⍬
-      :For (n t h) :In ↓[1]↑0 1 6(⎕NINFO⍠('Wildcard' 1)('Recurse' 1))(from,'/*')
-          hf,←(h∧t=1)/n ⍝ collect name of hidden directories
+      :For (n t h) :In ↓[1]↑0 1 6(⎕NINFO⍠('Wildcard' 1)('Recurse' 1))(from,'/*')   ⍝ get name, type & hidden-status
+          hf,←(h∧t=1)/⊂n ⍝ collect step of hidden directories
           :If h=1 ⋄ :Continue ⋄ :EndIf
-          :If 0<≢hf ⋄ :AndIf 1∊hf{⍺≡(≢⍺)↑⍵}¨⊂n ⋄ →0 ⋄ :EndIf ⍝ file from a hidden folder
+          :If 0<≢hf ⋄ :AndIf 1∊hf{⍺≡(≢⍺)↑⍵}¨⊂n ⋄ :Continue ⋄ :EndIf ⍝ file from a hidden folder
           :If 1=t  ⍝ directory
               :If from≡(≢from)↑n
                   :Trap 0
@@ -141,17 +193,13 @@
                   ⎕←'Paranoia justified!'
                   ∘∘∘
               :EndIf
-          :EndIf
-          :If 1≠(to,(≢from)↓n)⎕NCOPY n
-              →0⊣R←1
+          :Else
+              :If 1≠(to,(≢from)↓n)⎕NCOPY n
+                  →0⊣R←1
+              :EndIf
           :EndIf
       :EndFor
-     
+      R←0
     ∇
-
     :endsection
-
-
-
-
 :endnamespace

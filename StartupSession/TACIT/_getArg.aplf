@@ -1,8 +1,7 @@
  R←{req_dflt}_getArg(name args);t;req;dflt;swd
 ⍝ get value of a TACIT-Argument by first checking if args is a UCMD-commandline with the appopriate switch set
-⍝ or use an envVar (with a prefix "TACIT") if not UCMD or not set.
 ⍝ name can also be an integer, in which it is an index into the argumemts.
-⍝ Alternatively name can also be a character-vector which contains assignments of those values (no prefix, separated by "=")
+⍝ Alternatively name can also be a character-vector which contains assignments of those values (no prefix, separated by "=" - like you'd pass to a ]UCMD-Call)
  :If 0=⎕NC'req_dflt' ⋄ (req dflt)←0 ''
  :Else
      req←⊃req_dflt

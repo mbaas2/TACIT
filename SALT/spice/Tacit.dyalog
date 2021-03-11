@@ -1,6 +1,8 @@
-:Namespace Tacit ⍝ V 2.13
+﻿:Namespace Tacit ⍝ V 2.13
    ⍝ UCMD-File for TACIT. This just makes API-Functions available as UCMDs.
    ⍝ The syntax of the fns etc. is determined in the fn-header (StartupSession/TACIT/API.apln > ExecuteLocalTest)
+
+    :section UCMD
 
     ∇ r←List;findLine;nr;fn;ns;hd;maxH
       FetchAPI
@@ -15,20 +17,26 @@
       :EndIf
     ∇
 
-    ∇ r←Run(cmd args)
-      :If 3=⎕NC'⎕SE.TACIT.',cmd        ⍝ if function exists in ⎕SE.TACIT...
-          r←⍎'⎕SE.TACIT.',cmd,' args' ⍝ execute it...
+    ∇ r←Run(cmd args);res
+      :If 3=⎕NC'⎕SE.TACIT.API.',cmd        ⍝ if function exists in ⎕SE.TACIT...
+          res←⍎'⎕SE.TACIT.API.',cmd,' args' ⍝ execute it...
+          r←'Result of executing function "',cmd,'" - TACIT API ).  Returncode=',⍕1⊃res
+          r←{l ⍵(l←(≢r)⍴'=')}r
+          r←r,⊂2⊃res
+          ⍝r←∊r,¨⎕ucs 10
       :Else
           ⎕←↑⎕DMX
           r←''
       :EndIf
     ∇
+    :endsection
 
+    :section SecretSauce
     ∇ FetchAPI;findLine;quote;j;maxH;nr;hd;r
       :If 0=⎕NC'⎕SE.TACIT'
       :OrIf 0=⎕NC'⎕SE.TACIT.UCMD'
           ⍝ the bad news is that this needs the API-ns which will be brought in later (during regular boot)
-          ⍝ so let's do it now...
+          ⍝ so we do it now...
           'TACIT'⎕SE.⎕NS''
           'API'⎕SE.TACIT.⎕NS''
           {}⎕SE.Link.Import ⎕SE.TACIT.API((2 ⎕NQ'.' 'GetEnvironment' 'TACIT_FOLDER_SE'),'/API.apln')
@@ -74,5 +82,5 @@
           ⎕SE.TACIT.UCMD._List←(¯1↓⎕SE.TACIT.UCMD._List),']'
       :EndIf
     ∇
-
+    :endsection
 :EndNamespace
