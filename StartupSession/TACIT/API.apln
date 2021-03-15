@@ -3,21 +3,36 @@
 
     Timeout←180 ⍝ seconds before we consider a job to have timedout
 
-    ∇ {(res Log)}←ExecuteLocalTest arg;fld;fl;loc;xin;hasCfg;rc;specs;R;step;specsObj;lg
+    ∇ {(res Log)}←ExecuteLocalTest arg;fld;fl;loc;xin;hasCfg;rc;specs;R;step;specsObj;lg;cnt;list;showedIO;log;del;list2;v
 ⍝:: Execute local tests
-⍝?: Execute local tests (Syntax: ]ExecuteLocalTest {path}\TACIT.JSON  [-ExecIn=path]
-⍝??: Argument: mandatory, points to a TACIT.JSON-File.
-⍝??: NB: the tests will be executed in the folder that contains file given in argument, unless -execin points to an existing, empty folder)
-⍝Parse: 1L -execin=
-⍝R: (rc Log)  rc=0: success, anything else means failure. For error-codes see TACIT-API.docx
+⍝?: Execute local tests
+⍝?:
+⍝?: ]ExecuteLocalTest <path>TACIT.json[5] [-workdir=<location> [-empty] [-cleanup[=O|N]] | [-cleanup[=N]]]
+⍝Parse:               1L                   -workdir=            -empty   -cleanup[∊]ON
+⍝??: Execute local tests
+⍝??:
+⍝??: ]ExecuteLocalTest    <path>TACIT.json[5] [-workdir=<location> [-empty] [-cleanup[=N|O]] | [-cleanup]]
+⍝??:
+⍝??: <path>               location of TACIT.json or TACIT.json5 file
+⍝??:
+⍝??: -workdir=<location>  directory in which the tests should be executed (all files/folders found in <path> will be copied to <location>)
+⍝??:
+⍝??: -empty               delete all files from <location> before running tests
+⍝??:
+⍝??: -cleanup             files to delete after running tests:
+⍝??: -cleanup=O           delete only Old files copied from <path> (keeps files resulting from tests)
+⍝??: -cleanup=N           delete only New files created while running the tests (keeps files copied from <path>)
+⍝??: -cleanup=ON          delete all files in <location> after running tests
+⍝??:
       res←0 ⋄ Log←''
       arg←##._Parse arg  ⍝ ensure its a parsed arg...
       fl←∊1 ⎕NPARTS(1 ''##._getArg 1 arg)  ⍝ fld=folder, fl=path to a TACIT.json
       ('File or directory "',fl,'" not found')⎕SIGNAL(~⎕NEXISTS fl)/700
       fl,←(1=∊1 ⎕NINFO fl)/('\/'∊⍨⊢/fl)↓'/TACIT.JSON'  ⍝ we also accept folders as arg and append the filespec automatically (since we're expecting one specific file anyway)
+     
       fld←1⊃⎕NPARTS fl
-      xin←0(1⊃⎕NPARTS fl)##._getArg'EXECIN'arg
-      hasCfg←0 ⍝ did we create a TACIT.dcfg for this test? (to pass EnvVars)
+      xin←0(1⊃⎕NPARTS fl)##._getArg'workdir'arg
+      hasCfg←0 ⍝ did we create a TACIT.dcfg for this test? (to pass Config)
      
 ⍝      (⎕LC[1]+1)⎕STOP 1⊃⎕SI
       :If (~⎕NEXISTS fl)∨'tacit.json'≢10↑⎕C∊1↓⎕NPARTS fl ⋄ →0⊣(res Log)←700 'TACIT.JSON[5] not found' ⋄ :EndIf
@@ -26,47 +41,80 @@
       xin←∊1 ⎕NPARTS xin
       xin,←('/'≠⊢/xin)/'/'
       :If xin≢fld
-          :If ~⎕NEXISTS xin ⋄ →0⊣(res Log)←702 'ExecIn is not an existing folder' ⋄ :EndIf
-          :If 0<≢⊃0(⎕NINFO⍠('Recurse' 1)('Wildcard' 1))xin,'*' ⋄ →0⊣(res Log)←702 'ExecIn is not an empty folder' ⋄ :EndIf
-          :If 0≠xin CopyFolder fld ⋄ →0⊣(res Log)←703 'Problem copying files into execin-folder' ⋄ :EndIf
+          :If 0<≢list←⊃0(⎕NINFO⍠('Recurse' 1)('Wildcard' 1))xin,'*'
+              :If ~arg.Switch'empty'
+                  →0⊣(res Log)←702 'workdir is not an empty folder'
+              :Else
+                  {}1 ⎕NDELETE⌽list
+              :EndIf
+          :EndIf
+          :If 0≠xin CopyFolder fld ⋄ →0⊣(res Log)←703 'Problem copying files into workdir-folder' ⋄ :EndIf
       :EndIf
 ⍝TODO:: test if this apl qualifies...
      
       cnt←0
       list←⊃0(⎕NINFO⍠('Recurse' 1)('Wildcard' 1))xin,'*'   ⍝ remember files we had before tests were executed...
+      showedIO←0
       :For specs :In specsObj
-          :If hasCfg←9=specs.⎕NC'EnvVars'
+          :If hasCfg←9=specs.⎕NC'Config'
               'dcfg'⎕NS''
-              dcfg.Settings←specs.EnvVars
+              dcfg.Settings←specs.Config
               (⊂⎕JSON dcfg)⎕NPUT(xin,'TACIT.dcfg')1
           :EndIf
+     
      
           R←0 ''
           :For step :In 'Setup' 'Test' 'Teardown'
               :Select ⊃(rc log)←step RunJob(fl←specs⍎step)(hasCfg/xin,'TACIT.dcfg')(specs)
               :Case 0,(((⊂step)∊'Setup' 'Teardown')/4),(((⊂step)∊'Test' 'Teardown')/1) ⍝ we do nothing here, but may need to catch these cases...(and continue to the next step)
-              :Case 1 ⋄ R←rc(step,' failed: log=',log) ⋄ :Leave
-              :Case 2 ⋄ R←rc(step,' did not end properly (Timeout Error)') ⋄ :Leave
-              :Case 3 ⋄ R←rc'No statusfile (TACIT.',(⎕ step),'.[ok|err]) found after ',(⎕C step),' ended' ⋄ :Leave
-              :Case 4 ⋄ R←rc'Invalid or non-existent file "',fl,'" for step "',step,'"' ⋄ :Leave
+              :Case 1
+                  R←rc(step,' failed: log=',log)
+                  :Leave
+              :Case 2
+                  R←rc(step,' did not end properly (Timeout Error)')
+                  :Leave
+              :Case 3
+                  R←rc'No statusfile (TACIT.',(⎕ step),'.[ok|err]) found after ',(⎕C step),' ended'
+                  :Leave
+              :Case 4
+                  R←rc'Invalid or non-existent file "',fl,'" for step "',step,'"'
+                  :Leave
               :EndSelect
           :EndFor
           res←~(~res)∧rc=0
-          Log,←⊂((R[1]≠0)/'*** '),'Status of test ',({(⎕DR' ')=⎕DR ⍵:'"',⍵,'"' ⋄ ⍕⍵}specs.id),':'
-          Log,←⊂'Ended with returncode=',(⍕rc),((rc≠0)∧0<≢log)/' and message "',log,'"'
-     
-          :If hasCfg ⋄ ⎕NDELETE xin,'TACIT.dcfg' ⋄ :EndIf  ⍝ remove dcfg if we created it...
+          Log,←⊂(3⍴'·*'[1+rc>0]),' ',({''≡⍥⎕DR ⍵:'"',⍵,'"' ⋄ 'Test ',(⍕⍵),(~showedIO)/' (⎕IO=1)'}specs.id),({⍵=0:': success ···' ⋄ ': FAILURE (return code = ',(⍕⍵),') ***'}rc)
+          showedIO←showedIO∨''≡⍥⎕DR specs.id
+          :If rc>0
+          :AndIf 0<≢log
+              Log,←⊂'    Message: "',log,'"'
+          :EndIf
+          Log,←⊂''
+          :If hasCfg
+              ⎕NDELETE xin,'TACIT.dcfg'  ⍝ remove dcfg if we created it...
+          :EndIf
       :EndFor
       list2←⊃0(⎕NINFO⍠('Recurse' 1)('Wildcard' 1))xin,'*'   ⍝ remember files we had before tests were executed...
-⍝ is this relevant at all???
-      :If ∨/~list2∊list
-          ⎕←'=== New files:'
-          ⎕←↑(~list2∊list)/list2
-      :EndIf
-      :If ∨/~list∊list2
-          ⎕←'==== Deleted files:'
-          ⎕←↑(~list∊list2)/list
-      :EndIf
+      del←0⍴⊂''
+     
+      :Select v←arg.Switch'cleanup'
+      :CaseList 'ON' 'NO'
+          :If fld≡xin
+              ⎕←'Use of modifier -cleanup=',v,' is not supported when -in was not given or the same as the source folder of TACIT.json'
+          :Else
+              del←list2
+          :EndIf
+      :Case 'N'
+          del←(~list2∊list)/list2
+      :Case 1
+          :If fld≢xin
+              ⎕←'Use of modifier -cleanup without assignment of a value is not supported when -in is used '
+          :Else
+              del←(~list2∊list)/list2
+          :EndIf
+      :Case 'O'
+          del←list
+      :EndSelect
+      1 ⎕NDELETE⌽del
     ∇
 
 
@@ -78,6 +126,7 @@
 ⍝             2=aborted because of Timeout
 ⍝             3=no status file found
 ⍝             4=invalid or non-existent file
+     
       log←''
       →(0=≢file_cfg_specs)/R←0
       (file cfg specs)←3↑⊆file_cfg_specs
@@ -94,7 +143,7 @@
           '{Settings:{}}'⎕NPUT cfg 1
       :EndIf
      
-      ⍝...and explicitely set a log_file for each step (to be stored in execIn-folder):
+      ⍝...and explicitely set a log_file for each step (to be stored in workdir-folder):
       t←(⎕JSON⍠'Dialect' 'JSON5')1⊃⎕NGET cfg
       t.Settings.log_file←log_file←xin,'log_',step,'.dlf'
       (⊂⎕JSON t)⎕NPUT cfg 1
@@ -116,7 +165,7 @@
           :If ext≡'' ⋄ :AndIf 1≠1 ⎕NINFO Fullname ⋄ →0⊣R←4 ⋄ :EndIf
           TestLog←xin,'TACIT_',(2⊃⎕NPARTS(-(ext≡''))↓Fullname),'.log'
           ⍝cmd←'lx="⎕SE.UCMD''output.Find on -includequadoutput'' ⋄ ⎕SE.UCMD''DTest ',Fullname,' -off -testlog=',TestLog,' ',(specs{6::'' ⋄ ⍺⍎⍵}'DTestArgs'),'''"'
-          cmd←'lx="⎕SE.UCMD''DTest ',Fullname,' -off -testlog=',TestLog,' ',(specs{6::'' ⋄ ⍺⍎⍵}'DTestArgs'),'''"'
+          cmd←'lx="⎕SE.UCMD''DTest ',Fullname,' -off -testlog=',TestLog,' ',(specs{6::'' ⋄ ⍺⍎⍵}'DTestModifiers'),'''"'
           isDTest←1
       :Else ⋄
           →0⊣R←4('Did not recognize type of file "',file,'"')
@@ -128,7 +177,7 @@
       :Repeat
           ⎕DL 1  ⍝ delay one second...
       :Until proc.HasExited
-      :OrIf ⎕AI[3]<ai3+specs.Timeout
+      :OrIf ⎕AI[3]<ai3+specs.SecondsTimeout×1000
       :If ~proc.HasExited   ⍝ TIMEOUT
           {}proc.Kill ⋄ →0⊣R←2
       :EndIf
@@ -145,19 +194,25 @@
      
     ∇
 
-    ∇ (rc rspec log)←GetTestSpecs fl
-      :Trap rc←0
+    ∇ (rc rspec log)←GetTestSpecs fl;cnt;specs;spec;FoldJson
+      :Trap 0/rc←0
           log←''
           cnt←0
           rspec←⍬
           specs←(⎕JSON⍠'Dialect' 'JSON5')1⊃⎕NGET fl
-     
+          specs←{
+            Apl←{⎕JSON⍠('Dialect' 'JSON5')⊢⍵} 
+             Json←{1 ⎕JSON⍠'Compact' 0⊢⍵}
+             FoldMembers←'^.*[^\\]":'⎕R{':',⍨Json ⎕C Apl ¯1↓⍵.Match}
+             Apl FoldMembers Json Apl ⍵
+           } specs
+
           ⍝ and make sure we have something in Test (will be validated later)
           :For spec :In specs
             ⍝ set defaults for optional entries Setip/Teardown
               spec←(⊂'Setup'){0=⍵.⎕NC ⍺:⍵⊣⍵⍎⍺,'←''''' ⋄ ⍵}¨spec
               spec←(⊂'Teardown'){0=⍵.⎕NC ⍺:⍵⊣⍵⍎⍺,'←''''' ⋄ ⍵}¨spec
-              spec.Timeout←specs{6::⍵ ⋄ ⍺.Timeout}Timeout
+              spec.SecondsTimeout←specs{6::⍵ ⋄ ⍺.SecondsTimeout}Timeout
      
               cnt+←1
               spec.id←spec{6::⍵ ⋄ ⍺⍎'id'}cnt
@@ -169,6 +224,8 @@
           rc←701 ⋄ log←'Error reading "',fl,'":',nl,⎕JSON ⎕DMX
       :EndTrap
     ∇
+
+
 
     ∇ R←to CopyFolder from;hf;n;t;h
     ⍝ can't use ⎕NCOPY because that would also copy hidden files/directories - which would really hurt in the case of ".git"

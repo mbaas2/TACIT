@@ -1,4 +1,4 @@
-﻿:Namespace Tacit ⍝ V 2.13
+﻿:Namespace Tacit
    ⍝ UCMD-File for TACIT. This just makes API-Functions available as UCMDs.
    ⍝ The syntax of the fns etc. is determined in the fn-header (StartupSession/TACIT/API.apln > ExecuteLocalTest)
 
@@ -10,20 +10,21 @@
     ∇
 
     ∇ r←level Help cmd
-      FetchAPI
+      ⍝FetchAPI
       r←⎕SE.TACIT.UCMD._Help{(⍺[;⍳2]∧.≡⍵)⌿⍺[;3]}cmd level
       :If ∨/⎕SE.TACIT.UCMD._Help[;⍳2]∧.≡cmd(level+1)
-          r,←(⊂''),(⊂']',((level+2)⍴'?'),'TACIT.',cmd,' for more details')
+          r,←(⊂''),(⊂']TACIT.',cmd,' -',((level+2)⍴'?'),'    ⍝ for more details')
       :EndIf
     ∇
 
-    ∇ r←Run(cmd args);res
+    ∇ {r}←Run(cmd args);res;⎕ML
+      ⎕ML←1
       :If 3=⎕NC'⎕SE.TACIT.API.',cmd        ⍝ if function exists in ⎕SE.TACIT...
           res←⍎'⎕SE.TACIT.API.',cmd,' args' ⍝ execute it...
-          r←'Result of executing function "',cmd,'" - TACIT API ).  Returncode=',⍕1⊃res
-          r←{l ⍵(l←(≢r)⍴'=')}r
-          r←r,⊂2⊃res
-          ⍝r←∊r,¨⎕ucs 10
+          r←cmd,': ',{⍵=0:'success' ⋄ ('*** '/⍨0≠1⊃res),'FAILURE (return code=',(⍕⍵),')'},1⊃res
+          r←{l ⍵(l←(⌈/(≢r),≢¨2⊃res)⍴'-─'[1+0=1⊃res])}r
+          r←(⊂''),r,⊆2⊃res
+          r←∊r,¨⊂⎕UCS 13 10
       :Else
           ⎕←↑⎕DMX
           r←''
@@ -39,10 +40,10 @@
           ⍝ so we do it now...
           'TACIT'⎕SE.⎕NS''
           'API'⎕SE.TACIT.⎕NS''
-          {}⎕SE.Link.Import ⎕SE.TACIT.API((2 ⎕NQ'.' 'GetEnvironment' 'TACIT_FOLDER_SE'),'/API.apln')
+          'UCMD'⎕SE.TACIT.⎕NS''
+          {}⎕SE.Link.Import ⎕SE.TACIT.API(FindTACIT,'/API.apln')
           ⍝ Build list & help and construct stub-fns in ⎕SE.TACIT
           ⍝ based on fns we find in ⎕SE.TACIT.API
-          'UCMD'⎕SE.TACIT.⎕NS''
           ⎕SE.TACIT.UCMD._List←'['
           ⎕SE.TACIT.UCMD._Help←0 3⍴0  ⍝ [;1]=name, [;2]=Level, [;3]=line
           findLine←{{(+/∧\⍵=' ')↓⍵}¨l↓¨(((l←2+≢⍵)↑¨⍺)≡¨⊂'⍝',⍵,':')/⍺}
@@ -80,7 +81,22 @@
               {}⎕SE.TACIT.⎕FX hd
           :EndFor
           ⎕SE.TACIT.UCMD._List←(¯1↓⎕SE.TACIT.UCMD._List),']'
+          :If 0  ⍝ MB
+              'Fetched API!'
+              ⎕←⎕SI,[1.5]⎕LC
+          :EndIf
+      :Else
+          :If 0  ⍝ MB
+              ⎕←'API not loaded because present!'
+              ⎕←⎕SI,[1.5]⎕LC
+          :EndIf
       :EndIf
+    ∇
+
+    ∇ R←FindTACIT
+    ⍝ I had expected this would turn out to be more complicated...
+    ⍝ but doing it this way we don't even need the environment variable!
+      R←∊1 ⎕NPARTS(##.t~'"'),'/../../../StartupSession/TACIT'
     ∇
     :endsection
 :EndNamespace
