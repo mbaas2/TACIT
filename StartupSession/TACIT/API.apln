@@ -187,7 +187,7 @@
       StatusFiles←(⊂xin,'TACIT.',⎕C step),¨'.err' '.ok'
       1 ⎕NDELETE¨StatusFiles  ⍝ make sure there are no old statusfiles around...
      
-      :If 0=⎕NC'APLProcess' ⋄ ⎕SE.SALT.Load'APLProcess' ⋄ :EndIf
+      :If 0=⎕NC'APLProcess' ⋄ ⎕SE.SALT.Load _FindTACIT,'APLProcess' ⋄ :EndIf
       cpu←⎕AI[3]
       Fullname←∊1 ⎕NPARTS xin,file
       :Select ext←⎕C 3⊃⎕NPARTS file
@@ -306,6 +306,25 @@
           :EndIf
       :EndFor
       R←0
+    ∇
+
+        ∇ R←_FindTACIT
+    ⍝ I had expected this would turn out to be more complicated...
+    ⍝ but doing it this way we don't even need the environment variable!
+      :If 3=⎕SE.⎕NC'TACIT._getArg'
+      :AndIf 0<≢R←4⊃5179⌶'⎕SE.TACIT._getArg'      ⍝ default (and preferred) approach
+          R←1⊃⎕NPARTS R
+      :ElseIf 0<≢R←4⊃5179⌶⎕SE.TACIT.API  ⍝ also acceptable...
+          R←1⊃⎕NPARTS R
+      :ElseIf 2=##.⎕NC't'   ⍝ during List
+          R←∊1 ⎕NPARTS(##.t~'"'),'/../../../StartupSession/TACIT'
+      :ElseIf 2=##.##.⎕NC't'   ⍝ saw that stack as well during spc.List
+          R←∊1 ⎕NPARTS(##.##.t~'"'),'/../../../StartupSession/TACIT'
+      :Else  ⍝ take out before going into production...
+          600⌶1
+          ∘∘∘
+          600⌶0
+      :EndIf
     ∇
     :endsection
 :endnamespace

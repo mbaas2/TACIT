@@ -34,16 +34,15 @@
     :endsection
 
     :section SecretSauce
-    ∇ FetchAPI;findLine;quote;j;maxH;nr;hd;r
-      :If 0=⎕NC'⎕SE.TACIT'
-      :OrIf 0=⎕NC'⎕SE.TACIT.UCMD'
+    ∇ FetchAPI;findLine;quote;j;maxH;nr;hd;r;fn;AT;h
+    ⍝   :If 0=⎕NC'⎕SE.TACIT'
+      :If 0=⎕NC'⎕SE.TACIT.UCMD'
       :OrIf 0=⎕NC'⎕SE.TACIT.UCMD._Help'
           ⍝ the bad news is that this needs the API-ns which will be brought in later (during regular boot)
           ⍝ so we do it now...
-          'TACIT'⎕SE.⎕NS''
-          'API'⎕SE.TACIT.⎕NS''
+          ⍝'TACIT'⎕SE.⎕NS''
           'UCMD'⎕SE.TACIT.⎕NS''
-          {}⎕SE.Link.Import ⎕SE.TACIT.API(FindTACIT,'/API.apln')
+          :trap 0 ⋄ {}⎕SE.Link.Import ⎕SE.TACIT(FindTACIT,'/API.apln') ⋄ :endtrap ⍝ depending on the timing this might complain when API is present already
           ⍝ Build list & help and construct stub-fns in ⎕SE.TACIT
           ⍝ based on fns we find in ⎕SE.TACIT.API
           ⎕SE.TACIT.UCMD._List←'['
@@ -64,7 +63,7 @@
               :For h :In ⍳maxH
                   ⎕SE.TACIT.UCMD._Help⍪←(⊂fn),(h-1),[1.5]nr findLine h⍴'?'
               :EndFor
-              :Select 1⊃1⊃AT←⎕SE.TACIT.API.⎕AT fn
+              :Select 2⊃1⊃AT←⎕SE.TACIT.API.⎕AT fn
               :Case 0 ⍝ niladic or not a fn
                   hd←fn
               :Case 1 ⍝ monadic
@@ -72,7 +71,7 @@
               :CaseList ¯2 2
                   hd←'larg ',fn,' rarg'
               :EndSelect
-              :Select 2⊃1⊃⎕SE.TACIT.API.⎕AT fn
+              :Select 1⊃1⊃⎕SE.TACIT.API.⎕AT fn
               :Case 1 ⋄ hd←'R←',hd
               :Case ¯1 ⋄ hd←'{R}←',hd
               :EndSelect
@@ -98,7 +97,10 @@
     ∇ R←FindTACIT
     ⍝ I had expected this would turn out to be more complicated...
     ⍝ but doing it this way we don't even need the environment variable!
-      :If 0<≢R←4⊃5179⌶⎕SE.TACIT.API  ⍝ default (and preferred) approach
+      :If 3=⎕SE.⎕NC'TACIT._getArg'
+      :AndIf 0<≢R←4⊃5179⌶'⎕SE.TACIT._getArg'      ⍝ default (and preferred) approach
+          R←1⊃⎕NPARTS R
+      :ElseIf 0<≢R←4⊃5179⌶⎕SE.TACIT.API  ⍝ also acceptable...
           R←1⊃⎕NPARTS R
       :ElseIf 2=##.⎕NC't'   ⍝ during List
           R←∊1 ⎕NPARTS(##.t~'"'),'/../../../StartupSession/TACIT'
