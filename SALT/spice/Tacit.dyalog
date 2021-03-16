@@ -10,7 +10,7 @@
     ∇
 
     ∇ r←level Help cmd
-      ⍝FetchAPI
+      FetchAPI
       r←⎕SE.TACIT.UCMD._Help{(⍺[;⍳2]∧.≡⍵)⌿⍺[;3]}cmd level
       :If ∨/⎕SE.TACIT.UCMD._Help[;⍳2]∧.≡cmd(level+1)
           r,←(⊂''),(⊂']TACIT.',cmd,' -',((level+2)⍴'?'),'    ⍝ for more details')
@@ -19,12 +19,13 @@
 
     ∇ {r}←Run(cmd args);res;⎕ML
       ⎕ML←1
+      FetchAPI
       :If 3=⎕NC'⎕SE.TACIT.API.',cmd        ⍝ if function exists in ⎕SE.TACIT...
-          res←⍎'⎕SE.TACIT.API.',cmd,' args' ⍝ execute it...
-          r←cmd,': ',{⍵=0:'success' ⋄ ('*** '/⍨0≠1⊃res),'FAILURE (return code=',(⍕⍵),')'},1⊃res
-          r←{l ⍵(l←(⌈/(≢r),≢¨2⊃res)⍴'-─'[1+0=1⊃res])}r
-          r←(⊂''),r,⊆2⊃res
-          r←∊r,¨⊂⎕UCS 13 10
+          (rc log)←⍎'⎕SE.TACIT.API.',cmd,' args' ⍝ execute it...
+          r←cmd,': ',{⍵=0:'success' ⋄ ('*** '/⍨0≠rc),'FAILURE (return code=',(⍕⍵),')'},rc
+          r←l r(l←(⌈/(≢r),≢¨log)⍴'-─'[1+0=rc])
+          r←r,⊆log
+          r←∊r,¨⊂⎕UCS 13
       :Else
           ⎕←↑⎕DMX
           r←''
@@ -36,6 +37,7 @@
     ∇ FetchAPI;findLine;quote;j;maxH;nr;hd;r
       :If 0=⎕NC'⎕SE.TACIT'
       :OrIf 0=⎕NC'⎕SE.TACIT.UCMD'
+      :OrIf 0=⎕NC'⎕SE.TACIT.UCMD._Help'
           ⍝ the bad news is that this needs the API-ns which will be brought in later (during regular boot)
           ⍝ so we do it now...
           'TACIT'⎕SE.⎕NS''
@@ -81,7 +83,7 @@
               {}⎕SE.TACIT.⎕FX hd
           :EndFor
           ⎕SE.TACIT.UCMD._List←(¯1↓⎕SE.TACIT.UCMD._List),']'
-          :If 0  ⍝ MB
+          :If 1  ⍝ MB
               'Fetched API!'
               ⎕←⎕SI,[1.5]⎕LC
           :EndIf
@@ -96,7 +98,17 @@
     ∇ R←FindTACIT
     ⍝ I had expected this would turn out to be more complicated...
     ⍝ but doing it this way we don't even need the environment variable!
-      R←∊1 ⎕NPARTS(##.t~'"'),'/../../../StartupSession/TACIT'
+      :If 0<≢R←4⊃5179⌶⎕SE.TACIT.API  ⍝ default (and preferred) approach
+          R←1⊃⎕NPARTS R
+      :ElseIf 2=##.⎕NC't'   ⍝ during List
+          R←∊1 ⎕NPARTS(##.t~'"'),'/../../../StartupSession/TACIT'
+      :ElseIf 2=##.##.⎕NC't'   ⍝ saw that stack as well during spc.List
+          R←∊1 ⎕NPARTS(##.##.t~'"'),'/../../../StartupSession/TACIT'
+      :Else  ⍝ take out before going into production...
+          600⌶1
+          ∘∘∘
+          600⌶0
+      :EndIf
     ∇
     :endsection
 :EndNamespace
