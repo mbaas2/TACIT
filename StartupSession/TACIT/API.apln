@@ -35,7 +35,7 @@
      
 ⍝      (⎕LC[1]+1)⎕STOP 1⊃⎕SI
       :If (~⎕NEXISTS fl)∨'tacit.json'≢10↑⎕C∊1↓⎕NPARTS fl ⋄ →0⊣(res Log)←700 'TACIT.JSON[5] not found' ⋄ :EndIf
-      (rc specsObj lg)←GetTestSpecs fl
+      (rc specsObj lg)←_GetTestSpecs fl
       :If rc≠0 ⋄ →0⊣(res Log)←701('Error processing specs in "',fl,'": ',⍕lg) ⋄ :EndIf
       Log,←lg
       xin←∊1 ⎕NPARTS xin
@@ -81,7 +81,7 @@
 ⍝ remember files we had before tests were executed...
           list←⊃0(⎕NINFO⍠('Recurse' 1)('Wildcard' 1))xin,'*'
           :If xin≢fld
-              :If 0≠xin CopyFolder fld ⋄ →EndStep⊣(res log)←703 'Problem copying files into workdir-folder' ⋄ :EndIf
+              :If 0≠xin _CopyFolder fld ⋄ →EndStep⊣(res log)←703 'Problem copying files into workdir-folder' ⋄ :EndIf
           :EndIf
      
           cfg←''
@@ -99,7 +99,7 @@
               :AndIf 0=specs.⎕NC'step'
                   R←4 'Missing entry for step "test"'
               :Else
-                  :Select ⊃(rc jlog)←step RunJob(fl←specs⍎step)(cfg)(specs)
+                  :Select ⊃(rc jlog)←step _RunJob(fl←specs⍎step)(cfg)(specs)
                   :CaseList 0,(((⊂step)∊'setup' 'teardown')/4),(((⊂step)∊'test' 'teardown')/1) ⍝ we do nothing here, but may need to catch these cases...(and continue to the next step)
                   :Case 1
                       R←rc(step,' (using "',fl,'") failed')
@@ -163,7 +163,7 @@
 
 
     :section tools
-    ∇ (R log)←step RunJob file_cfg_specs;cpu;dws;cmd;ext;proc;StatusFiles;ai3;log;specs;cfg;file;isDTest;Fullname;t;TestLog;log_file
+    ∇ (R log)←step _RunJob file_cfg_specs;cpu;dws;cmd;ext;proc;StatusFiles;ai3;log;specs;cfg;file;isDTest;Fullname;t;TestLog;log_file
 ⍝ returncode: 0=ok
 ⍝             1=test failed
 ⍝             2=aborted because of Timeout
@@ -243,8 +243,8 @@
      EOF:
     ∇
 
-    ∇ (rc rspec log)←GetTestSpecs fl;cnt;specs;spec;FoldJson
-      :Trap 0/rc←0
+    ∇ (rc rspec log)←_GetTestSpecs fl;cnt;specs;spec;FoldJson
+      :Trap rc←0
           log←''
           cnt←0
           rspec←⍬
@@ -276,7 +276,7 @@
 
 
 
-    ∇ R←to CopyFolder from;hf;n;t;h
+    ∇ R←to _CopyFolder from;hf;n;t;h
     ⍝ can't use ⎕NCOPY because that would also copy hidden files/directories - which would really hurt in the case of ".git"
     ⍝ R is returncode. Values: 0=ok
     ⍝                          1=problems copying file
