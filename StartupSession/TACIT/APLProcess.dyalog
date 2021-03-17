@@ -75,10 +75,11 @@
       ⍝ {[3]} if present, a Boolean indicating whether to use the runtime version, OR a character vector of the executable name to run
       ⍝ {[4]} if present, the RIDE_INIT parameters to use
       ⍝ {[5]} if present, a log-file prefix for process output
+      ⍝ {[6]} if present, the "current directory" when APL is started
       make_common
       args←{2>|≡⍵:,⊂⍵ ⋄ ⍵}args
-      args←5↑args,(⍴args)↓'' '' 0 '' ''
-      (ws cmd rt RIDE_INIT OUT_FILE)←args
+      args←6↑args,(⍴args)↓'' '' 0 '' '' ''
+      (ws cmd rt RIDE_INIT OUT_FILE WorkingDir)←args
       PATH←SourcePath
       Start(ws cmd rt)
     ∇
@@ -86,6 +87,7 @@
     ∇ make_common
       Proc←⎕NS'' ⍝ Do NOT do this in the field definition
       IsSsh←0
+      WorkingDir←1⊃1⎕nparts'' ⍝ MB: default directory
     ∇
 
     ∇ Run
@@ -109,6 +111,7 @@
           ⎕USING←UsingSystemDiagnostics
           psi←⎕NEW Diagnostics.ProcessStartInfo,⊂Exe(ws,' ',args)
           psi.WindowStyle←Diagnostics.ProcessWindowStyle.Minimized
+          psi.WorkingDirectory←WorkingDir
           Proc←Diagnostics.Process.Start psi
       :Else ⍝ Unix
           :If ~∨/'LOG_FILE'⍷args            ⍝ By default
@@ -119,10 +122,13 @@
               (host port keyfile exe)←Exe
               cmd←args,' ',exe,' +s -q ',ws
               Proc←SshProc host port keyfile cmd
+              ⍝ MBaas: unsure how to add WorkingDir for SSH - simply prefix "cd" to cmd?
           :Else
               z←⍕GetCurrentProcessId
               output←(1+×≢OUT_FILE)⊃'/dev/null'OUT_FILE
-              pid←_SH'{ ',args,' ',Exe,' +s -q ',ws,' -c APLppid=',z,' </dev/null >',output,' 2>&1 & } ; echo $!'
+              ⍝ pid←_SH'{ ',args,' ',Exe,' +s -q ',ws,' -c APLppid=',z,' </dev/null >',output,' 2>&1 & } ; echo $!'
+              ⍝ MBaas: WorkingDir
+              pid←_SH 'cd ',WorkingDir,';{ ',args,' ',Exe,' +s -q ',ws,' -c APLppid=',z,' </dev/null >',output,' 2>&1 & } ; echo $!'
               Proc.Id←pid
               Proc.HasExited←HasExited
           :EndIf
