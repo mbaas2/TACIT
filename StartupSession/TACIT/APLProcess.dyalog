@@ -87,7 +87,7 @@
     ∇ make_common
       Proc←⎕NS'' ⍝ Do NOT do this in the field definition
       IsSsh←0
-      WorkingDir←1⊃1⎕nparts'' ⍝ MB: default directory
+      WorkingDir←1⊃1 ⎕NPARTS'' ⍝ MB: default directory
     ∇
 
     ∇ Run
@@ -128,7 +128,7 @@
               output←(1+×≢OUT_FILE)⊃'/dev/null'OUT_FILE
               ⍝ pid←_SH'{ ',args,' ',Exe,' +s -q ',ws,' -c APLppid=',z,' </dev/null >',output,' 2>&1 & } ; echo $!'
               ⍝ MBaas: WorkingDir
-              pid←_SH 'cd ',WorkingDir,';{ ',args,' ',Exe,' +s -q ',ws,' -c APLppid=',z,' </dev/null >',output,' 2>&1 & } ; echo $!'
+              pid←_SH'cd ',WorkingDir,';{ ',args,' ',Exe,' +s -q ',ws,' -c APLppid=',z,' </dev/null >',output,' 2>&1 & } ; echo $!'
               Proc.Id←pid
               Proc.HasExited←HasExited
           :EndIf

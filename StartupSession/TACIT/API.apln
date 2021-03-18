@@ -3,7 +3,7 @@
 
     Timeout←180 ⍝ seconds before we consider a job to have timedout
 
-    ∇ {(res Log)}←ExecuteLocalTest arg;fld;fl;loc;xin;rc;specs;R;step;specsObj;lg;cnt;list;showedIO;log;del;list2;v;xin∆;jlog;cfg
+    ∇ {(res Log)}←ExecuteLocalTest arg;fld;fl;loc;xin;rc;specs;R;step;specsObj;lg;cnt;list;showedIO;log;del;list2;v;xin∆;jlog;cfg;rcTest
 ⍝:: Execute local tests
 ⍝?: Execute local tests
 ⍝?:
@@ -81,17 +81,20 @@
 ⍝ remember files we had before tests were executed...
           list←⊃0(⎕NINFO⍠('Recurse' 1)('Wildcard' 1))xin,'*'
           :If xin≢fld
-              :If 0≠xin _CopyFolder fld ⋄ →EndStep⊣(res log)←703 'Problem copying files into workdir-folder' ⋄ :EndIf
+              :If 0≠xin _CopyFolder fld
+                  (res log)←703 'Problem copying files into workdir-folder'
+                  →EndStep
+              :EndIf
           :EndIf
      
           cfg←''
           :If 9=specs.⎕NC'config'
-              cfg←specs.config{⍵,'=',(⍕⍺⍎⍵),' '}¨specs.config.⎕NL ¯2
+              cfg←∊specs.config{⍵,'=',(⍕⍺⍎⍵),' '}¨specs.config.⎕NL ¯2
           :ElseIf 2=specs.⎕NC'config'
               cfg←specs.config
           :EndIf
      
-     
+          rcTest←¯1
           R←0 ''
           :For step :In 'setup' 'test' 'teardown'
               ⍞←step,'...'
@@ -99,7 +102,12 @@
               :AndIf 0=specs.⎕NC step
                   R←4 'Missing entry for step "test"'
               :Else
-                  :Select ⊃(rc jlog)←step _RunJob(fl←specs⍎step)(cfg)(specs)
+                  fl←specs⍎step
+                  (rc jlog)←R←step _RunJob(cfg)(specs)
+                  :If (⊂step)∊'setup' 'test'
+                      rcTest←rc
+                  :EndIf
+                  :Select rc
                   :CaseList 0,(((⊂step)∊'setup' 'teardown')/4),(((⊂step)∊'test' 'teardown')/1) ⍝ we do nothing here, but may need to catch these cases...(and continue to the next step)
                   :Case 1
                       R←rc(step,' (using "',fl,'") failed')
@@ -118,8 +126,9 @@
           :EndFor
      
      EndStep:
-          res←~(~res)∧rc=0
-          Log,←⊂(3⍴'·*'[1+rc>0]),' ',({''≡⍥⎕DR ⍵:'"',⍵,'"' ⋄ 'Test ',(⍕⍵),(~showedIO)/' (⎕IO=1)'}specs.id),({⍵=0:': success ···' ⋄ ': FAILURE (return code = ',(⍕⍵),') ***'}rc)
+          res←~(~res)∧rcTest=0
+          :If log≡'' ⋄ log←2⊃R ⋄ :EndIf
+          Log,←⊂(3⍴'·*'[1+rcTest≠0]),' ',({''≡⍥⎕DR ⍵:'"',⍵,'"' ⋄ 'Test ',(⍕⍵),(~showedIO)/' (⎕IO=1)'}specs.id),({⍵=0:': success ···' ⋄ ': FAILURE (return code = ',(⍕⍵),') ***'}rcTest)
           showedIO←showedIO∨''≡⍥⎕DR specs.id
           :If 0<≢log,jlog
               log←(⊆log),⊆jlog
@@ -127,8 +136,7 @@
                   Log,←⊂'    Message: "',log,'"'
               :Else
                   Log,←⊂'     Log:'
-                  Log,←⊂(⊂'     '),¨log
-                  ⎕SE.Dyalog.Utils.display Log
+                  Log,←⊂∊{(z/'     '),⍵,((z←0<≢⍵)∧~∨/(⎕UCS 13 10)∊∊⍵)/⎕UCS 13}¨log
               :EndIf
           :EndIf
           Log,←⊂''
@@ -163,7 +171,7 @@
 
 
     :section tools
-    ∇ (R log)←step _RunJob file_cfg_specs;cpu;dws;cmd;ext;proc;StatusFiles;ai3;log;specs;cfg;file;isDTest;Fullname;t;TestLog;log_file
+    ∇ (R log)←step _RunJob specs_cfg;cpu;dws;cmd;ext;proc;StatusFiles;ai3;log;specs;cfg;file;isDTest;Fullname;t;TestLog;log_file;exited
 ⍝ returncode: 0=ok
 ⍝             1=test failed
 ⍝             2=aborted because of Timeout
@@ -173,8 +181,9 @@
       log←''
       dws←cmd←''  ⍝ Arguments for constructor of APLProcess
       R←0
-      →(0=≢file_cfg_specs)/EOF
-      (file cfg specs)←3↑⊆file_cfg_specs
+      →(0=≢specs_cfg)/EOF
+      (cfg specs)←2↑⊆specs_cfg
+      file←specs{6::'' ⋄ ⍺⍎⍵}step
       →(0=≢file)/EOF
       isDTest←0   ⍝ do we have a ]DTest-Call?
      
@@ -191,47 +200,45 @@
       cpu←⎕AI[3]
       Fullname←∊1 ⎕NPARTS xin,file
       :Select ext←⎕C 3⊃⎕NPARTS file
-      :CaseList '.aplf' '.aplc' '.apln' ⋄ cmd←'load="',Fullname,'"'
+      :CaseList '.aplf' '.aplc' '.apln' ⋄ cmd←'LOAD="',Fullname,'"'
       :Case '.dws' ⋄ dws←Fullname
-      :Case '.dyalog' ⋄ cmd←'lx="⎕SE.UCMD''xx←Load ',Fullname,''' ⋄ ⍎{9≠⎕nc ⍵: ⍵ ⋄ ⍵,''.Run ⍬''}''xx''"'
+      :Case '.dyalog' ⋄ cmd←'LX="⎕SE.UCMD''xx←Load ''''',Fullname,''''''' ⋄ ⍎{9≠⎕nc ⍵: ⍵,'' ⍬'' ⋄ ⍵,''.Run ⍬''}xx"'
       :CaseList '' '.dyalogtest'
           R←4('.dyalogtest or folder-argument only valid for "test", not "',step,'"') ⋄ →(step≢'test')/EndJob
           :If ext≡'' ⋄ :AndIf 1≠1 ⎕NINFO Fullname ⋄ R←4 ⋄ →EndJob ⋄ :EndIf  ⍝ no extension, but does not refer to a folder
           TestLog←xin,'TACIT_',(2⊃⎕NPARTS(-(ext≡''))↓Fullname),'.log'
           ⍝cmd←'lx="⎕SE.UCMD''output.Find on -includequadoutput'' ⋄ ⎕SE.UCMD''DTest ',Fullname,' -off -testlog=',TestLog,' ',(specs{6::'' ⋄ ⍺⍎⍵}'DTestArgs'),'''"'
-          cmd←'lx="⎕SE.UCMD''DTest ',Fullname,' -off -testlog=',TestLog,' ',(specs{6::'' ⋄ ⍺⍎⍵}'dtestmodifiers'),'''"'
+          cmd←'LX="⎕SE.UCMD''DTest ''''',Fullname,''''' -off -testlog=''''',TestLog,''''' ',(specs{6::'' ⋄ ⍺⍎⍵}'dtestmodifiers'),'''"'
           isDTest←1
-      :Else 
+      :Else
           R←4('Did not recognize type of file "',file,'"') ⋄ →EndJob
       :EndSelect
       cmd,←' ',cfg
-      :If step≡'test'
-          ⎕←'test=',specs.id
-          (⎕LC[1]+1)⎕STOP 1⊃⎕SI
-      :Else
-          600⌶1
-          ⎕←'step ≢ test! step=',step
-          ∘∘∘
-          600⌶0
-      :EndIf
       ⎕←(⎕UCS 13),'Executing APLProcess with cmdline ',cmd,' in dir ',xin
+      exited←¯1
       proc←⎕NEW APLProcess(dws cmd 0 '' ''xin)
       ai3←⎕AI[3]
+      :While ~proc.IsRunning proc.Proc.Id ⋄ ai3←⎕AI[3] ⋄ :EndWhile   ⍝ wait until process has started
       :Repeat
-              ⎕DL 1⌊specs.secondstimeout×1000  ⍝ delay one second by default, but allow smaller (if someone challenges our timeouts...)
-      :Until (ai31←⎕AI[3])>ai3+specs.secondstimeout×1000
+          ⎕DL 1⌊specs.secondstimeout×1000  ⍝ delay one second by default, but allow smaller (if someone challenges our timeouts...)
+      :Until (ai31←⎕AI[3])≥⌊ai3+specs.secondstimeout×1000
       :OrIf exited←proc.HasExited
      
       :If 0=⎕NC'exited'
-      :OrIf ~exited   ⍝ TIMEOUT
+      :OrIf exited∊0 ¯1   ⍝ TIMEOUT
           log←'Process did not complete within ',(1⍕0.001×⎕AI[3]-ai3),' seconds and was killed (SecondsTimeout=',(⍕specs.secondstimeout),((specs.secondstimeout=Timeout)/' default value'),')'
           {}proc.Kill
           R←2 ⋄ →EndJob
       :EndIf
       :If isDTest
          ⍝ how to determine success or failure? (On Windows we could use prod.GetExitCode, but that won't be general enough for TACIT)
-          :If ⎕NEXISTS TestLog ⋄ ''⎕NPUT 1⊃StatusFiles ⋄ log←']DTest created a logfile ("',TestLog,'") indicating failed tests. Details in that file' ⋄ R←1  ⍝ logfile was created → tests failed!
-          :Else ⋄ (⊂'')⎕NPUT 2⊃StatusFiles ⋄ R←0               ⍝ absence of log indicates success
+          :If ⎕NEXISTS TestLog  ⍝ logfile was created → tests failed!
+              ''⎕NPUT 1⊃StatusFiles
+              log←']DTest created a logfile ("',TestLog,'") indicating failed tests. Details in that file'
+              R←1
+          :Else               ⍝ absence of log indicates success
+              (⊂'')⎕NPUT 2⊃StatusFiles
+              R←0
           :EndIf
           →EndJob
       :EndIf
@@ -308,7 +315,7 @@
       R←0
     ∇
 
-        ∇ R←_FindTACIT
+    ∇ R←_FindTACIT
     ⍝ I had expected this would turn out to be more complicated...
     ⍝ but doing it this way we don't even need the environment variable!
       :If 3=⎕SE.⎕NC'TACIT._getArg'
