@@ -96,7 +96,7 @@
           :For step :In 'setup' 'test' 'teardown'
               ⍞←step,'...'
               :If step≡'test'
-              :AndIf 0=specs.⎕NC'step'
+              :AndIf 0=specs.⎕NC step
                   R←4 'Missing entry for step "test"'
               :Else
                   :Select ⊃(rc jlog)←step _RunJob(fl←specs⍎step)(cfg)(specs)
@@ -181,7 +181,7 @@
       :If ~⎕NEXISTS xin,file ⋄ R←4 ⋄ →EndJob ⋄ :EndIf
      
       ⍝...and explicitely set a log_file for each step (to be stored in workdir-folder):
-      cfg,←' log_file="',(xin,'log_',step,'.dlf'),'"'
+      cfg,←' LOG_FILE="',(xin,'log_',step,'.dlf'),'"'
      
     ⍝ step of Statusfiles to indicate failure [1] or success[2]
       StatusFiles←(⊂xin,'TACIT.',⎕C step),¨'.err' '.ok'
@@ -218,8 +218,8 @@
       proc←⎕NEW APLProcess(dws cmd 0 '' ''xin)
       ai3←⎕AI[3]
       :Repeat
-          ⎕DL 1⌊specs.secondstimeout  ⍝ delay one second by default, but allow smaller (if someone challenges our timeouts...)
-      :Until ⎕AI[3]>ai3+specs.secondstimeout×1000
+              ⎕DL 1⌊specs.secondstimeout×1000  ⍝ delay one second by default, but allow smaller (if someone challenges our timeouts...)
+      :Until (ai31←⎕AI[3])>ai3+specs.secondstimeout×1000
       :OrIf exited←proc.HasExited
      
       :If 0=⎕NC'exited'
